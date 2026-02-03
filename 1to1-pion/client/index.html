@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PION 1to1</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div>
+      <div>
+        <h1>Video Call</h1>
+        <p>Two-Way Audio & Video</p>
+      </div>
+
+      <div class="content">
+        <div class="button-section" id="buttonSection">
+          <button id="start">Start Call</button>
+        </div>
+
+        <audio id="audio" autoplay></audio>
+        <div class="video-section" id="localCamVideoSection">
+          <div class="video-label">Local Video Feed</div>
+          <video id="local-cam-video" autoplay playsinline muted></video>
+        </div>
+        <div class="video-section" id="remoteCamVideoSection" >
+          <div class="video-label">Remote Video Feed</div>
+          <video id="remote-cam-video" autoplay playsinline muted></video>
+        </div>
+
+        <div
+          class="video-section"
+          id="screenVideoSection"
+          style="display: none"
+        >
+          <div class="video-label">Screen Share Feed</div>
+          <video id="screen-video" autoplay playsinline muted></video>
+        </div>
+
+        <div
+          class="call-buttons-section"
+          id="callButtonsSection"
+          style="display: none"
+        >
+          <button id="screenShareButton" class="button-secondary">
+            Screen Share
+          </button>
+          <button id="exit" class="button-danger">Exit Call</button>
+        </div>
+
+        <div class="controls-section" id="controlsSection">
+          <div class="control-group">
+            <label for="availableCameras">Camera Selection</label>
+            <select name="availableCameras" id="availableCameras"></select>
+          </div>
+
+          <div class="control-group">
+            <label for="availableMicrophones">Microphone Selection</label>
+            <select
+              name="availableMicrophones"
+              id="availableMicrophones"
+            ></select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
