@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PION 1to1</title>
     <link rel="stylesheet" href="style.css" />
-    <link rel="icon" href="data:,">
+    <link rel="icon" href="data:," />
   </head>
   <body>
     <div>
@@ -18,13 +18,26 @@
         <div class="button-section" id="buttonSection">
           <button id="start">Start Call</button>
         </div>
+        <div class="controls-section" id="controlsSection">
+          <div class="control-group">
+            <label for="availableCameras">Camera Selection</label>
+            <select name="availableCameras" id="availableCameras"></select>
+          </div>
 
+          <div class="control-group">
+            <label for="availableMicrophones">Microphone Selection</label>
+            <select
+              name="availableMicrophones"
+              id="availableMicrophones"
+            ></select>
+          </div>
+        </div>
         <audio id="audio" autoplay></audio>
         <div class="video-section" id="localCamVideoSection">
           <div class="video-label">Local Video Feed</div>
           <video id="local-cam-video" autoplay playsinline muted></video>
         </div>
-        <div class="video-section" id="remoteCamVideoSection" >
+        <div class="video-section" id="remoteCamVideoSection">
           <div class="video-label">Remote Video Feed</div>
           <video id="remote-cam-video" autoplay playsinline muted></video>
         </div>
@@ -49,20 +62,7 @@
           <button id="exit" class="button-danger">Exit Call</button>
         </div>
 
-        <div class="controls-section" id="controlsSection">
-          <div class="control-group">
-            <label for="availableCameras">Camera Selection</label>
-            <select name="availableCameras" id="availableCameras"></select>
-          </div>
 
-          <div class="control-group">
-            <label for="availableMicrophones">Microphone Selection</label>
-            <select
-              name="availableMicrophones"
-              id="availableMicrophones"
-            ></select>
-          </div>
-        </div>
       </div>
     </div>
     <script type="module" src="script.js"></script>
