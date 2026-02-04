@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
@@ -33,6 +32,7 @@ func (s *Server) handleSignal(c *Client, raw []byte) {
 		}
 
 		answer, err := c.PC.CreateAnswer(nil)
+	
 		if err != nil {
 			log.Fatalln("err in creating answer-", err)
 		}
@@ -40,13 +40,20 @@ func (s *Server) handleSignal(c *Client, raw []byte) {
 			panic(setErr)
 		}
 
-		ansMesg, _ := json.Marshal(Message{
+		ansMesg := MessageOut{
 			Type: "answer",
-			Data: json.RawMessage(strconv.Quote(answer.SDP)),
-		})
+			Data: map[string]string{
+				"type": "answer",
+				"sdp":  answer.SDP,
+			},
+		}
+
+		ansMesgBytes, _ := json.Marshal(ansMesg)
 
 		fmt.Println("sending answer message")
-		c.Conn.WriteMessage(websocket.TextMessage, ansMesg)
+		c.clientMux.Lock()
+		defer c.clientMux.Unlock()
+		c.Conn.WriteMessage(websocket.TextMessage, ansMesgBytes)
 
 	case "ice":
 		var candidate webrtc.ICECandidateInit

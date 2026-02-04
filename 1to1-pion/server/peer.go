@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
@@ -21,14 +20,23 @@ func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
 		}
 
 		fmt.Println("sending ice candidate")
-		msg, _ := json.Marshal(Message{
+		candidate := c.ToJSON()
+		msg, _ := json.Marshal(MessageOut{
 			Type: "ice",
-			Data: json.RawMessage(strconv.Quote(c.ToJSON().Candidate)),
+			Data: candidate,
 		})
 		client.clientMux.Lock()
 		defer client.clientMux.Unlock()
 		client.Conn.WriteMessage(websocket.TextMessage, msg)
 
+	})
+
+	pc.OnSignalingStateChange(func(s webrtc.SignalingState) {
+		fmt.Println("signaling state changed:", s)
+	})
+
+	pc.OnConnectionStateChange(func(pcs webrtc.PeerConnectionState) {
+		fmt.Println("peer connection state changed:", pcs)
 	})
 	return pc, nil
 }

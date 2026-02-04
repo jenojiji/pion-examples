@@ -11,18 +11,18 @@ ws.onmessage = async (event) => {
   console.log(event);
 
   const message = JSON.parse(event.data);
-  console.log("message recieved on socket");
-  console.log(message);
-  console.log("----------------------------");
-  console.log(message.data);
-  console.log("----------------------------");
+  console.log("message recieved on socket-" + message.type);
+ 
   switch (message.type) {
     case "answer":
       console.log("processing answer");
-      peerConnection.setRemoteDescription({
-        type: "answer",
-        sdp: message.data,
-      });
+      try {
+        await peerConnection.setRemoteDescription(message.data);
+        console.log("remote description set on answer message");
+      } catch (error) {
+        console.error("Failed to set remote description:", error);
+      }
+
       for (const candidate of pendingIceCandidates) {
         const iceMessage = {
           type: "ice",
@@ -33,6 +33,10 @@ ws.onmessage = async (event) => {
       }
       pendingIceCandidates = [];
       for (const remoteCandidate of pendingRemoteIceCandidates) {
+        console.log("*********************");
+        console.log(remoteCandidate);
+        console.log("*********************");
+
         try {
           await peerConnection.addIceCandidate(
             new RTCIceCandidate(remoteCandidate),
@@ -42,18 +46,24 @@ ws.onmessage = async (event) => {
           console.warn("Failed to add ICE candidate:", iceErr);
         }
       }
+      pendingRemoteIceCandidates = [];
       break;
 
     case "ice":
       console.log("processing ice");
       console.log(message);
+      console.log("~~~~~~~~~~~");
+      console.log(peerConnection.remoteDescription);
+      console.log("~~~~~~~~~~~");
       // const candidate = JSON.parse(message.data);
       try {
         if (peerConnection.remoteDescription) {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(message.data));
+          await peerConnection.addIceCandidate(
+            new RTCIceCandidate(message.data),
+          );
           console.log("remote ICE candidate added immediately");
         } else {
-          pendingRemoteIceCandidates.push(candidate);
+          pendingRemoteIceCandidates.push(message.data);
           console.log("remote ICE candidate buffered");
         }
       } catch (iceErr) {
@@ -89,8 +99,10 @@ const cameraTransceiver = peerConnection.addTransceiver("video", {
 
 peerConnection.onicecandidate = async (e) => {
   if (e.candidate == null) return;
+  console.log("------------ice generated at client------------");
+  console.log(JSON.stringify(e.candidate));
+  console.log("------------ice generated at client------------");
   console.log("onicecandidate:" + e);
-
   if (peerConnection.remoteDescription) {
     const iceMessage = {
       type: "ice",
@@ -99,9 +111,14 @@ peerConnection.onicecandidate = async (e) => {
     ws.send(JSON.stringify(iceMessage));
     console.log("ice message send from client");
   } else {
+    console.log("buffering ice candidate from ice generation");
     pendingIceCandidates.push(e.candidate);
   }
 };
+
+peerConnection.onconnectionstatechange = () => {
+  console.log("connection state change:", peerConnection.connectionState);
+}
 
 peerConnection.ontrack = (e) => {
   console.log("Track received:", e.track.kind);
