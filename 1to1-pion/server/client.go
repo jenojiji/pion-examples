@@ -8,8 +8,12 @@ import (
 )
 
 type Client struct {
-	ID   int
-	Conn *websocket.Conn
-	PC   *webrtc.PeerConnection
+	ID        int
+	Conn      *websocket.Conn
+	PC        *webrtc.PeerConnection
+	AudioOut  *webrtc.TrackLocalStaticRTP
+	VideoOut  *webrtc.TrackLocalStaticRTP
 	clientMux sync.Mutex
+	readyOnce sync.Once
+	readyChan chan struct{}
 }

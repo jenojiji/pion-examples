@@ -41,6 +41,8 @@ func (s *Server) HandleWS(w http.ResponseWriter, r *http.Request) {
 		Conn: conn,
 	}
 
+	client.readyChan = make(chan struct{})
+
 	if err := s.room.Add(client); err != nil {
 		conn.Close()
 		http.Error(w, "room full", http.StatusForbidden)
