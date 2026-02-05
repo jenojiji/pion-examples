@@ -6,32 +6,32 @@ import (
 	"log"
 
 	"github.com/gorilla/websocket"
-	"github.com/pion/rtcp"
+	"github.com/pion/interceptor"
+	"github.com/pion/interceptor/pkg/intervalpli"
 	"github.com/pion/webrtc/v4"
 )
 
 func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
-	if err != nil {
-		return nil, err
+	mediaEngine := &webrtc.MediaEngine{}
+
+	if err := mediaEngine.RegisterDefaultCodecs(); err != nil {
+		panic(err)
 	}
 
-	_, err = pc.AddTransceiverFromKind(
-		webrtc.RTPCodecTypeAudio,
-		webrtc.RTPTransceiverInit{
-			Direction: webrtc.RTPTransceiverDirectionSendrecv,
-		},
-	)
+	interceptorRegistry := &interceptor.Registry{}
+	intervalPliFactory, err := intervalpli.NewReceiverInterceptor()
 	if err != nil {
-		return nil, err
+		panic(err)
+	}
+	interceptorRegistry.Add(intervalPliFactory)
+
+	if err = webrtc.RegisterDefaultInterceptors(mediaEngine, interceptorRegistry); err != nil {
+		panic(err)
 	}
 
-	_, err = pc.AddTransceiverFromKind(
-		webrtc.RTPCodecTypeVideo,
-		webrtc.RTPTransceiverInit{
-			Direction: webrtc.RTPTransceiverDirectionSendrecv,
-		},
-	)
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(mediaEngine), webrtc.WithInterceptorRegistry(interceptorRegistry))
+
+	pc, err := api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		return nil, err
 	}
@@ -129,33 +129,18 @@ func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
 		}
 		log.Println(outTrack)
 
-		if tr.Kind() == webrtc.RTPCodecTypeVideo {
-			go func() {
-				log.Println("sending PLI to request keyframe")
-				_ = client.PC.WriteRTCP([]rtcp.Packet{
-					&rtcp.PictureLossIndication{
-						MediaSSRC: uint32(tr.SSRC()),
-					},
-				})
-			}()
-		}
-
 		go func() {
-			// buf := make([]byte, 1400)
-			// rtpPacket := &rtp.Packet{}
 			for {
 				pkt, _, err := tr.ReadRTP()
 				if err != nil {
 					log.Println("RTP read error:", err)
 					return
 				}
-				// log.Println("packet read")
 
 				if err := outTrack.WriteRTP(pkt); err != nil {
 					log.Println("RTP write error:", err)
 					return
 				}
-				// log.Println("packet write")
 			}
 		}()
 
