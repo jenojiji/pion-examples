@@ -7,12 +7,13 @@ let pendingRemoteIceCandidates = [];
 ws.onopen = () => console.log("connected");
 ws.onclose = () => console.log("disconnected");
 ws.onerror = (event) => console.log("ws error:", event);
+
 ws.onmessage = async (event) => {
   console.log(event);
 
   const message = JSON.parse(event.data);
   console.log("message recieved on socket-" + message.type);
- 
+
   switch (message.type) {
     case "answer":
       console.log("processing answer");
@@ -87,7 +88,7 @@ const audioEl = document.getElementById("audio");
 peerConnection = new RTCPeerConnection({
   ice: [],
 });
-console.log("peer connection init");
+console.log("peer connection created");
 
 const audioTransceiver = peerConnection.addTransceiver("audio", {
   direction: "sendrecv",
@@ -118,32 +119,44 @@ peerConnection.onicecandidate = async (e) => {
 
 peerConnection.onconnectionstatechange = () => {
   console.log("connection state change:", peerConnection.connectionState);
-}
+};
 
 peerConnection.ontrack = (e) => {
   console.log("Track received:", e.track.kind);
   console.log(e);
 
-  if (e.transceiver.mid === "1") {
-    console.log("+++++++++++++camera transceiver++++++++++++++");
-    const stream = new MediaStream();
-    stream.addTrack(e.track);
-    remoteCamVideoSection.style.display = "flex";
-    remoteCamVideoEl.srcObject = stream;
-    console.log("camvideo stream set");
-
-    remoteCamVideoEl.muted = false;
-    remoteCamVideoEl.play().catch((err) => {
-      console.log(err);
-    });
-  }
-
   if (e.transceiver.mid === "0") {
     console.log("+++++++++++++audio transceiver++++++++++++++");
     const stream = new MediaStream();
     stream.addTrack(e.track);
+    console.log("`````````````````````````");
+    console.log(stream);
+    console.log(e.streams[0]);
+    console.log("`````````````````````````");
+
     audioEl.srcObject = stream;
+    audioEl.muted = false;
+    audioEl.play().catch((err) => {
+      console.log("remote audio playing err");
+      console.log(err);
+    });
     console.log("audio stream set");
+  }
+
+  if (e.transceiver.mid === "1") {
+    console.log("+++++++++++++camera transceiver++++++++++++++");
+    const stream = new MediaStream();
+    stream.addTrack(e.track);
+    console.log("`````````````````````````");
+    console.log(stream);
+    console.log(e.streams[0]);
+    console.log("`````````````````````````");
+    remoteCamVideoEl.srcObject = stream;
+    remoteCamVideoEl.play().catch((err) => {
+      console.log("remote video playing err");
+      console.log(err);
+    });
+    console.log("camvideo stream set");
   }
 };
 
@@ -228,11 +241,8 @@ document.getElementById("start").onclick = async () => {
     console.log("set local desc");
 
     localCamVideoEl.srcObject = stream;
-    localCamVideoEl.muted = true;
-    localCamVideoEl.playsInline = true;
-    console.log("all set");
-
     await localCamVideoEl.play().catch((err) => {
+      console.log("local video playing err");
       console.log(err);
     });
     console.log("awaited");
