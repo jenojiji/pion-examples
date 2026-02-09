@@ -20,7 +20,7 @@ func (r *Room) Add(c *Client) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if len(r.clients) >= 2 {
+	if len(r.clients) >= 3 {
 		return fmt.Errorf("room full")
 	}
 
@@ -44,4 +44,15 @@ func (r *Room) Other(id int) *Client {
 		}
 	}
 	return nil
+}
+
+func (r *Room) GetClientById(id int) *Client {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.clients[id] != nil {
+		return r.clients[id]
+	} else {
+		fmt.Println("No client found with ID:", id)
+		return nil
+	}
 }

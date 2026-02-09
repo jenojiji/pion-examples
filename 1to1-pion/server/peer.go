@@ -6,32 +6,12 @@ import (
 	"log"
 
 	"github.com/gorilla/websocket"
-	"github.com/pion/interceptor"
-	"github.com/pion/interceptor/pkg/intervalpli"
 	"github.com/pion/webrtc/v4"
 )
 
 func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
-	mediaEngine := &webrtc.MediaEngine{}
 
-	if err := mediaEngine.RegisterDefaultCodecs(); err != nil {
-		panic(err)
-	}
-
-	interceptorRegistry := &interceptor.Registry{}
-	intervalPliFactory, err := intervalpli.NewReceiverInterceptor()
-	if err != nil {
-		panic(err)
-	}
-	interceptorRegistry.Add(intervalPliFactory)
-
-	if err = webrtc.RegisterDefaultInterceptors(mediaEngine, interceptorRegistry); err != nil {
-		panic(err)
-	}
-
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(mediaEngine), webrtc.WithInterceptorRegistry(interceptorRegistry))
-
-	pc, err := api.NewPeerConnection(webrtc.Configuration{})
+	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		return nil, err
 	}
@@ -104,28 +84,35 @@ func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
 	pc.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
 		log.Printf("Track recieved: kind=%s, codec=%s", tr.Kind(), tr.Codec().MimeType)
 
-		other := room.Other(client.ID)
-		if other == nil {
+		var peer *Client
+		switch client.ID {
+		case 1:
+			peer = room.GetClientById(2)
+		case 2:
+			peer = room.GetClientById(1)
+		case 3:
+			peer = room.GetClientById(1)
+		}
+		if peer == nil {
 			log.Println("no peer to forward to")
 			return
 		}
-		log.Println("fetch other peer-", other.ID)
-		if other.PC == nil {
+		log.Println("fetch other peer-", peer.ID)
+		if peer.PC == nil {
 			fmt.Println("other peer pc nil")
 		}
-		log.Println("waiting for other peer to become ready:", other.ID)
+		log.Println("waiting for other peer to become ready:", peer.ID)
 
-		<-other.readyChan
-		fmt.Println(other.PC.ConnectionState())
-		fmt.Println(other.PC.ICEConnectionState())
-
-		log.Println("other peer is ready, start forwarding to:", other.ID)
+		<-peer.readyChan
+		fmt.Println(peer.PC.ConnectionState())
+		fmt.Println(peer.PC.ICEConnectionState())
+		log.Println("other peer is ready, start forwarding to:", peer.ID)
 
 		var outTrack *webrtc.TrackLocalStaticRTP
 		if tr.Kind() == webrtc.RTPCodecTypeAudio {
-			outTrack = other.AudioOut
+			outTrack = peer.AudioOut
 		} else if tr.Kind() == webrtc.RTPCodecTypeVideo {
-			outTrack = other.VideoOut
+			outTrack = peer.VideoOut
 		}
 		log.Println(outTrack)
 
