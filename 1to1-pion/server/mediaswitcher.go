@@ -1,8 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"log"
+	"io"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -18,18 +19,25 @@ type MediaSwitcher struct {
 func NewMediaSwitcher(outTrack *webrtc.TrackLocalStaticRTP) *MediaSwitcher {
 	ms := &MediaSwitcher{
 		outTrack:   outTrack,
-		packetChan: make(chan *rtp.Packet,100),
+		packetChan: make(chan *rtp.Packet, 100),
 	}
 	go ms.writer()
 	return ms
 }
 
 func (ms *MediaSwitcher) writer() {
-	for {
-		pkt := <-ms.packetChan
-		if err := ms.outTrack.WriteRTP(pkt); err != nil {
-			log.Println("write RTP error:", err)
-			return
+	var currTimestamp uint32
+	for i := uint16(0); ; i++ {
+		packet := <-ms.packetChan
+		currTimestamp = currTimestamp + packet.Timestamp
+		packet.Timestamp = currTimestamp
+		packet.SequenceNumber = i
+		if err := ms.outTrack.WriteRTP(packet); err != nil {
+			fmt.Println(err)
+			if errors.Is(err, io.ErrClosedPipe) {
+				fmt.Println("pipe closed;write failed")
+				return
+			}
 		}
 	}
 }

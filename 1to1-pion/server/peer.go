@@ -154,12 +154,21 @@ func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
 		switcher.SwitchTo(client.ID, peer.PC, tr)
 		fmt.Println("switcher done")
 
+		var lastTS uint32
+
 		for {
 			pkt, _, err := tr.ReadRTP()
 			if err != nil {
 				log.Println("RTP read error:", err)
 				return
 			}
+			oldTS := pkt.Timestamp
+			if lastTS == 0 {
+				pkt.Timestamp = 0
+			} else {
+				pkt.Timestamp = pkt.Timestamp - lastTS
+			}
+			lastTS = oldTS
 
 			if switcher.activeSource == client.ID {
 				switcher.packetChan <- pkt
