@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mediadevices WebRTC</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <div>
+      <div>
+        <h1>Mediadevices WebRTC Testing</h1>
+      </div>
+
+      <div class="content">
+
+        <audio
+          id="audioElement"
+          autoplay
+          muted
+        ></audio>
+
+        <div class="video-section" id="videoSection">
+          <div class="video-label">Device Cam Feed</div>
+          <video id="videoElement" autoplay playsinline muted></video>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
