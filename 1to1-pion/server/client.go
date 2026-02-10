@@ -13,6 +13,10 @@ type Client struct {
 	PC        *webrtc.PeerConnection
 	AudioOut  *webrtc.TrackLocalStaticRTP
 	VideoOut  *webrtc.TrackLocalStaticRTP
+
+	AudioSwitcher *MediaSwitcher
+	VideoSwitcher *MediaSwitcher
+
 	clientMux sync.Mutex
 	readyOnce sync.Once
 	readyChan chan struct{}

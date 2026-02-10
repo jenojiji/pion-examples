@@ -45,6 +45,9 @@ func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
 	client.AudioOut = audioTrack
 	client.VideoOut = videoTrack
 
+	client.AudioSwitcher = NewMediaSwitcher(audioTrack)
+	client.VideoSwitcher = NewMediaSwitcher(videoTrack)
+
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c == nil {
 			return
@@ -84,15 +87,47 @@ func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
 	pc.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
 		log.Printf("Track recieved: kind=%s, codec=%s", tr.Kind(), tr.Codec().MimeType)
 
-		var peer *Client
-		switch client.ID {
-		case 1:
-			peer = room.GetClientById(2)
-		case 2:
-			peer = room.GetClientById(1)
-		case 3:
-			peer = room.GetClientById(1)
+		// ---------- Direction B: client1 → client2 ----------
+		if client.ID == 1 {
+			fmt.Println("processing client1")
+			peer := room.GetClientById(2)
+			if peer == nil {
+				return
+			}
+
+			<-peer.readyChan
+
+			var out *webrtc.TrackLocalStaticRTP
+			if tr.Kind() == webrtc.RTPCodecTypeVideo {
+				out = peer.VideoOut
+			} else {
+				out = peer.AudioOut
+			}
+
+			go func() {
+				for {
+					pkt, _, err := tr.ReadRTP()
+					if err != nil {
+						return
+					}
+					if err := out.WriteRTP(pkt); err != nil {
+						log.Println("RTP write error:", err)
+						return
+					}
+				}
+			}()
+			return
 		}
+
+		// ---------- Direction A: client2/client3 → client1 ----------
+		if client.ID != 2 && client.ID != 3 {
+			fmt.Println("returning")
+			return
+		}
+
+		fmt.Println("processing client2|3")
+		var peer = room.GetClientById(1)
+
 		if peer == nil {
 			log.Println("no peer to forward to")
 			return
@@ -108,29 +143,28 @@ func NewPeer(client *Client, room *Room) (*webrtc.PeerConnection, error) {
 		fmt.Println(peer.PC.ICEConnectionState())
 		log.Println("other peer is ready, start forwarding to:", peer.ID)
 
-		var outTrack *webrtc.TrackLocalStaticRTP
+		var switcher *MediaSwitcher
 		if tr.Kind() == webrtc.RTPCodecTypeAudio {
-			outTrack = peer.AudioOut
-		} else if tr.Kind() == webrtc.RTPCodecTypeVideo {
-			outTrack = peer.VideoOut
+			switcher = peer.AudioSwitcher
+		} else {
+			switcher = peer.VideoSwitcher
 		}
-		log.Println(outTrack)
+		fmt.Println("clientID=", client.ID)
 
-		go func() {
-			for {
-				pkt, _, err := tr.ReadRTP()
-				if err != nil {
-					log.Println("RTP read error:", err)
-					return
-				}
+		switcher.SwitchTo(client.ID, peer.PC, tr)
+		fmt.Println("switcher done")
 
-				if err := outTrack.WriteRTP(pkt); err != nil {
-					log.Println("RTP write error:", err)
-					return
-				}
+		for {
+			pkt, _, err := tr.ReadRTP()
+			if err != nil {
+				log.Println("RTP read error:", err)
+				return
 			}
-		}()
 
+			if switcher.activeSource == client.ID {
+				switcher.packetChan <- pkt
+			}
+		}
 	})
 	return pc, nil
 }
