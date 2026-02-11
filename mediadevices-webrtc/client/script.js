@@ -7,6 +7,10 @@ ws.onopen = () => console.log("connected");
 ws.onclose = () => console.log("disconnected");
 ws.onerror = (event) => console.log("ws error:", event);
 
+const videoElement = document.getElementById("videoElement");
+const videoSection = document.getElementById("videoSection");
+const audioElement = document.getElementById("audioElement");
+
 ws.onmessage = async (event) => {
   console.log(event);
 
@@ -18,9 +22,70 @@ ws.onmessage = async (event) => {
       console.log("processing offer");
       try {
         peerConnection = new RTCPeerConnection({
-          ice: [],
+          iceServers: [],
         });
         console.log("peer connection created");
+
+        peerConnection.onicecandidate = async (e) => {
+          if (e.candidate == null) return;
+          console.log("------------ice generated at client------------");
+          console.log(JSON.stringify(e.candidate));
+          console.log("------------ice generated at client------------");
+          console.log("onicecandidate:" + e);
+
+          const iceMessage = {
+            type: "ice",
+            data: e.candidate,
+          };
+          ws.send(JSON.stringify(iceMessage));
+          console.log("ice message send from client");
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+          console.log(
+            "connection state change:",
+            peerConnection.connectionState,
+          );
+        };
+
+        peerConnection.ontrack = (e) => {
+          console.log("Track received:", e.track.kind);
+          console.log(e);
+
+          if (e.transceiver.mid === "0") {
+            console.log("+++++++++++++audio transceiver++++++++++++++");
+            const stream = new MediaStream();
+            stream.addTrack(e.track);
+            console.log("`````````````````````````");
+            console.log(stream);
+            console.log(e.streams[0]);
+            console.log("`````````````````````````");
+
+            audioElement.srcObject = stream;
+            audioElement.muted = false;
+            audioElement.play().catch((err) => {
+              console.log("remote audio playing err");
+              console.log(err);
+            });
+            console.log("audio stream set");
+          }
+
+          if (e.transceiver.mid === "1") {
+            console.log("+++++++++++++camera transceiver++++++++++++++");
+            const stream = new MediaStream();
+            stream.addTrack(e.track);
+            console.log("`````````````````````````");
+            console.log(stream);
+            console.log(e.streams[0]);
+            console.log("`````````````````````````");
+            videoElement.srcObject = stream;
+            videoElement.play().catch((err) => {
+              console.log("remote video playing err");
+              console.log(err);
+            });
+            console.log("camvideo stream set");
+          }
+        };
 
         peerConnection.addTransceiver("audio", {
           direction: "recvonly",
@@ -63,7 +128,7 @@ ws.onmessage = async (event) => {
       console.log("processing ice");
       console.log(message);
       try {
-        if (peerConnection != null) {
+        if (peerConnection && peerConnection.remoteDescription) {
           await peerConnection.addIceCandidate(
             new RTCIceCandidate(message.data),
           );
@@ -79,67 +144,5 @@ ws.onmessage = async (event) => {
     default:
       console.log("undefined case");
       break;
-  }
-};
-
-const videoElement = document.getElementById("videoElement");
-const videoSection = document.getElementById("videoSection");
-const audioElement = document.getElementById("audioElement");
-
-peerConnection.onicecandidate = async (e) => {
-  if (e.candidate == null) return;
-  console.log("------------ice generated at client------------");
-  console.log(JSON.stringify(e.candidate));
-  console.log("------------ice generated at client------------");
-  console.log("onicecandidate:" + e);
-
-  const iceMessage = {
-    type: "ice",
-    data: e.candidate,
-  };
-  ws.send(JSON.stringify(iceMessage));
-  console.log("ice message send from client");
-};
-
-peerConnection.onconnectionstatechange = () => {
-  console.log("connection state change:", peerConnection.connectionState);
-};
-
-peerConnection.ontrack = (e) => {
-  console.log("Track received:", e.track.kind);
-  console.log(e);
-
-  if (e.transceiver.mid === "0") {
-    console.log("+++++++++++++audio transceiver++++++++++++++");
-    const stream = new MediaStream();
-    stream.addTrack(e.track);
-    console.log("`````````````````````````");
-    console.log(stream);
-    console.log(e.streams[0]);
-    console.log("`````````````````````````");
-
-    audioElement.srcObject = stream;
-    audioElement.muted = false;
-    audioElement.play().catch((err) => {
-      console.log("remote audio playing err");
-      console.log(err);
-    });
-    console.log("audio stream set");
-  }
-
-  if (e.transceiver.mid === "1") {
-    console.log("+++++++++++++camera transceiver++++++++++++++");
-    const stream = new MediaStream();
-    stream.addTrack(e.track);
-    console.log("`````````````````````````");
-    console.log(stream);
-    console.log(e.streams[0]);
-    console.log("`````````````````````````");
-    videoElement.srcObject = stream;
-    videoElement.play().catch((err) => {
-      console.log("remote video playing err");
-      console.log(err);
-    });
-    console.log("camvideo stream set");
   }
 };
