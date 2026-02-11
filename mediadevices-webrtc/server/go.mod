@@ -1,6 +1,6 @@
 module github.com/jenojiji/pion-examples/mediadevices-webrtc
 
-go 1.22.2
+go 1.24.0
 
 require (
 	github.com/gorilla/websocket v1.5.3
@@ -28,9 +28,9 @@ require (
 	github.com/pion/transport/v4 v4.0.1 // indirect
 	github.com/pion/turn/v4 v4.1.4 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/image v0.23.0 // indirect
-	golang.org/x/net v0.35.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
 )
