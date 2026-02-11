@@ -3,8 +3,8 @@ const ws = new WebSocket("ws://localhost:9091/ws");
 let peerConnection = null;
 let pendingRemoteIceCandidates = [];
 
-ws.onopen = () => console.log("connected");
-ws.onclose = () => console.log("disconnected");
+ws.onopen = () => console.log("websocket connected");
+ws.onclose = () => console.log("websocketdisconnected");
 ws.onerror = (event) => console.log("ws error:", event);
 
 const videoElement = document.getElementById("videoElement");
@@ -52,7 +52,7 @@ ws.onmessage = async (event) => {
           console.log("Track received:", e.track.kind);
           console.log(e);
 
-          if (e.transceiver.mid === "0") {
+          if (e.track.kind === "audio") {
             console.log("+++++++++++++audio transceiver++++++++++++++");
             const stream = new MediaStream();
             stream.addTrack(e.track);
@@ -70,7 +70,7 @@ ws.onmessage = async (event) => {
             console.log("audio stream set");
           }
 
-          if (e.transceiver.mid === "1") {
+          if (e.track.kind === "video") {
             console.log("+++++++++++++camera transceiver++++++++++++++");
             const stream = new MediaStream();
             stream.addTrack(e.track);

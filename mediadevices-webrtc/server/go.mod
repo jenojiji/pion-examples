@@ -9,6 +9,8 @@ require (
 )
 
 require (
+	github.com/blackjack/webcam v0.6.1 // indirect
+	github.com/gen2brain/malgo v0.11.24 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/pion/datachannel v1.6.0 // indirect
 	github.com/pion/dtls/v3 v3.0.10 // indirect
