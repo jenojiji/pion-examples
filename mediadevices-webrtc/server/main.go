@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"github.com/pion/mediadevices"
-	"github.com/pion/mediadevices/pkg/codec/opus"
 	"github.com/pion/mediadevices/pkg/codec/x264"
 	_ "github.com/pion/mediadevices/pkg/driver/camera"
-	_ "github.com/pion/mediadevices/pkg/driver/microphone"
+	"github.com/pion/mediadevices/pkg/prop"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -96,7 +96,6 @@ func (c *Client) writePump() {
 			return
 		}
 	}
-
 }
 
 func handleWSConnection(w http.ResponseWriter, r *http.Request) {
@@ -131,13 +130,8 @@ func handleWSConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	x264Params.BitRate = 500_000
 
-	opusParams, err := opus.NewParams()
-	if err != nil {
-		panic(err)
-	}
 
 	codecSelector := mediadevices.NewCodecSelector(
-		mediadevices.WithAudioEncoders(&opusParams),
 		mediadevices.WithVideoEncoders(&x264Params),
 	)
 
@@ -163,14 +157,32 @@ func handleWSConnection(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println()
 
+	var videoDID string
+	for _, d := range devices {
+		switch d.Kind {
+		case mediadevices.VideoInput:
+			if strings.Contains(d.Label, "video-index0;video1") {
+				videoDID = d.DeviceID
+			}
+		}
+	}
+	if videoDID == "" {
+		log.Fatal("could not find video1 capture device")
+	}
+	log.Printf("Using video DeviceID: %s", videoDID)
+
 	stream, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
-		Video: func(mtc *mediadevices.MediaTrackConstraints) {},
-		Audio: func(mtc *mediadevices.MediaTrackConstraints) {},
+		Video: func(mtc *mediadevices.MediaTrackConstraints) {
+			mtc.DeviceID = prop.String(videoDID)
+			mtc.Width = prop.Int(1280)
+			mtc.Height = prop.Int(720)
+			mtc.FrameRate = prop.Float(30)
+		},
 		Codec: codecSelector,
 	})
 	if err != nil {
-		fmt.Println("getusermedia err")
-		panic(err)
+		log.Printf("GetUserMedia failed: %v", err)
+		return
 	}
 	fmt.Println(len(stream.GetTracks()), "tracks obtained from getUserMedia")
 

@@ -1,4 +1,4 @@
-const ws = new WebSocket("ws://localhost:9091/ws");
+const ws = new WebSocket("ws://192.168.2.92:9091/ws");
 
 let peerConnection = null;
 let pendingRemoteIceCandidates = [];
