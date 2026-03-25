@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gorilla/websocket"
@@ -15,11 +17,16 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
+/* ----------------------------- Types ----------------------------- */
+
 type Client struct {
 	ID          int
 	Conn        *websocket.Conn
 	PC          *webrtc.PeerConnection
 	MessageChan chan []byte
+
+	VideoSender *webrtc.RTPSender
+	VideoStream mediadevices.MediaStream
 }
 
 type MessageIn struct {
@@ -32,74 +39,129 @@ type MessageOut struct {
 	Data any    `json:"data"`
 }
 
+/* ----------------------------- Globals ----------------------------- */
+
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
-var pendingICECandidates = []webrtc.ICECandidateInit{}
 
-func handleWSMessage(client *Client, msgByte []byte) {
-	log.Println("handle WS Message")
+var pendingICECandidates []webrtc.ICECandidateInit
 
+var (
+	video3DID string
+	video4DID string
+)
+
+/* ----------------------------- Media Helpers ----------------------------- */
+
+func getVideoStream(deviceID string, codecSelector *mediadevices.CodecSelector) (mediadevices.MediaStream, error) {
+	return mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
+		Video: func(mtc *mediadevices.MediaTrackConstraints) {
+			mtc.DeviceID = prop.String(deviceID)
+			mtc.Width = prop.Int(1280)
+			mtc.Height = prop.Int(720)
+			mtc.FrameRate = prop.Float(30)
+		},
+		Codec: codecSelector,
+	})
+}
+
+func closeStream(stream mediadevices.MediaStream) {
+	for _, t := range stream.GetTracks() {
+		_ = t.Close()
+	}
+}
+
+func (c *Client) switchVideo(deviceID string, codecSelector *mediadevices.CodecSelector) error {
+	log.Println("Switching video to:", deviceID)
+
+	if c.VideoStream != nil {
+		closeStream(c.VideoStream)
+	}
+
+	stream, err := getVideoStream(deviceID, codecSelector)
+	if err != nil {
+		return err
+	}
+
+	newTrack := stream.GetVideoTracks()[0]
+
+	if err := c.VideoSender.ReplaceTrack(newTrack); err != nil {
+		return err
+	}
+
+	c.VideoStream = stream
+	log.Println("Video track replaced successfully")
+	return nil
+}
+
+/* ----------------------------- WebSocket ----------------------------- */
+
+func handleWSMessage(client *Client, msgByte []byte, codecSelector *mediadevices.CodecSelector) {
 	var msg MessageIn
 	if err := json.Unmarshal(msgByte, &msg); err != nil {
-		fmt.Println("message unmarshaling failed-", err)
+		log.Println("WS unmarshal failed:", err)
 		return
 	}
-	fmt.Println("handling message-", msg.Type)
-	switch msg.Type {
-	case "answer":
-		log.Println("processing answer")
-		sdp := webrtc.SessionDescription{}
-		err := json.Unmarshal(msg.Data, &sdp)
-		if err != nil {
-			log.Printf("Error unmarshaling sdp: %v", err)
-			return
-		}
-		if setErr := client.PC.SetRemoteDescription(sdp); setErr != nil {
-			panic(setErr)
-		}
 
-		for _, candidate := range pendingICECandidates {
-			if err := client.PC.AddICECandidate(candidate); err != nil {
-				log.Fatal("err in adding ice candidate-", err)
-				panic(err)
-			}
+	switch msg.Type {
+
+	case "answer":
+		var sdp webrtc.SessionDescription
+		_ = json.Unmarshal(msg.Data, &sdp)
+		_ = client.PC.SetRemoteDescription(sdp)
+
+		for _, c := range pendingICECandidates {
+			_ = client.PC.AddICECandidate(c)
 		}
 		pendingICECandidates = nil
+
 	case "ice":
-		log.Println("processing ice candidate")
-		var candidate webrtc.ICECandidateInit
-		err := json.Unmarshal(msg.Data, &candidate)
+		var c webrtc.ICECandidateInit
+		_ = json.Unmarshal(msg.Data, &c)
+
+		if client.PC.RemoteDescription() != nil {
+			_ = client.PC.AddICECandidate(c)
+		} else {
+			pendingICECandidates = append(pendingICECandidates, c)
+		}
+
+	case "pixelationLevelChange":
+		var level int
+		if err := json.Unmarshal(msg.Data, &level); err != nil {
+			var s string
+			_ = json.Unmarshal(msg.Data, &s)
+			level, _ = strconv.Atoi(s)
+		}
+
+		addr := net.UnixAddr{Name: "/tmp/pixel_block.sock", Net: "unixgram"}
+		conn, err := net.DialUnix("unixgram", nil, &addr)
 		if err != nil {
-			log.Printf("Error unmarshaling ICE candidate: %v", err)
 			return
 		}
-		if client.PC.RemoteDescription() != nil {
-			if err := client.PC.AddICECandidate(candidate); err != nil {
-				log.Fatal("err in adding ice candidate-", err)
-				panic(err)
-			}
-		} else {
-			pendingICECandidates = append(pendingICECandidates, candidate)
-		}
+		defer conn.Close()
+
+		_ = binary.Write(conn, binary.LittleEndian, int32(level))
+
+	case "pixelate":
+		log.Println("Pixelate → video4")
+		_ = client.switchVideo(video4DID, codecSelector)
+
+	case "unpixelate":
+		log.Println("Unpixelate → video3")
+		_ = client.switchVideo(video3DID, codecSelector)
 	}
 }
 
 func (c *Client) writePump() {
-	log.Println("starting write pump")
 	for msg := range c.MessageChan {
-		err := c.Conn.WriteMessage(websocket.TextMessage, msg)
-		if err != nil {
-			log.Println("Write error:", err)
-			return
-		}
+		_ = c.Conn.WriteMessage(websocket.TextMessage, msg)
 	}
 }
 
+/* ----------------------------- HTTP Handler ----------------------------- */
+
 func handleWSConnection(w http.ResponseWriter, r *http.Request) {
-	log.Println("handling new WS connection")
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -108,28 +170,24 @@ func handleWSConnection(w http.ResponseWriter, r *http.Request) {
 	client := &Client{
 		ID:          1,
 		Conn:        conn,
-		MessageChan: make(chan []byte, 32),
+		MessageChan: make(chan []byte, 16),
 	}
-	log.Printf("Client %d connected\n", client.ID)
 
 	go client.writePump()
-
 	defer func() {
-		log.Printf("Client %d disconnected\n", client.ID)
-		client.PC.Close()
+		if client.VideoStream != nil {
+			closeStream(client.VideoStream)
+		}
+		if client.PC != nil {
+			_ = client.PC.Close()
+		}
 		conn.Close()
-		close(client.MessageChan)
 	}()
 
-	config := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{},
-	}
-	x264Params, err := x264.NewParams()
-	if err != nil {
-		panic(err)
-	}
-	x264Params.BitRate = 500_000
+	/* -------------------- WebRTC Setup -------------------- */
 
+	x264Params, _ := x264.NewParams()
+	x264Params.BitRate = 1_500_000
 
 	codecSelector := mediadevices.NewCodecSelector(
 		mediadevices.WithVideoEncoders(&x264Params),
@@ -139,122 +197,71 @@ func handleWSConnection(w http.ResponseWriter, r *http.Request) {
 	codecSelector.Populate(&mediaEngine)
 
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(&mediaEngine))
-
-	pc, err := api.NewPeerConnection(config)
-	if err != nil {
-		panic(err)
-	}
-	log.Println("peer connection created")
+	pc, _ := api.NewPeerConnection(webrtc.Configuration{})
 	client.PC = pc
 
-	devices := mediadevices.EnumerateDevices()
-	fmt.Printf("=== Found %d device(s) ===\n", len(devices))
-	for _, d := range devices {
-		fmt.Printf("  [%v] Label: %q  DeviceID: %q\n", d.Kind, d.Label, d.DeviceID)
-	}
-	if len(devices) == 0 {
-		log.Fatal("No devices found — check CGO_ENABLED=1, libv4l-dev, and video group membership")
-	}
-	fmt.Println()
+	/* -------------------- Devices -------------------- */
 
-	var videoDID string
-	for _, d := range devices {
-		switch d.Kind {
-		case mediadevices.VideoInput:
-			if strings.Contains(d.Label, "video-index0;video1") {
-				videoDID = d.DeviceID
+	for _, d := range mediadevices.EnumerateDevices() {
+		if d.Kind == mediadevices.VideoInput {
+			if strings.Contains(d.Label, "video3") {
+				video3DID = d.DeviceID
+			}
+			if strings.Contains(d.Label, "video4") {
+				video4DID = d.DeviceID
 			}
 		}
 	}
-	if videoDID == "" {
-		log.Fatal("could not find video1 capture device")
-	}
-	log.Printf("Using video DeviceID: %s", videoDID)
 
-	stream, err := mediadevices.GetUserMedia(mediadevices.MediaStreamConstraints{
-		Video: func(mtc *mediadevices.MediaTrackConstraints) {
-			mtc.DeviceID = prop.String(videoDID)
-			mtc.Width = prop.Int(1280)
-			mtc.Height = prop.Int(720)
-			mtc.FrameRate = prop.Float(30)
-		},
-		Codec: codecSelector,
-	})
+	if video3DID == "" || video4DID == "" {
+		log.Fatal("video3 or video4 device not found")
+	}
+
+	/* -------------------- Initial Stream -------------------- */
+
+	stream, err := getVideoStream(video3DID, codecSelector)
 	if err != nil {
-		log.Printf("GetUserMedia failed: %v", err)
-		return
-	}
-	fmt.Println(len(stream.GetTracks()), "tracks obtained from getUserMedia")
-
-	for _, track := range stream.GetTracks() {
-		track.OnEnded(func(err error) {
-			fmt.Printf("Track (ID: %s) ended with error: %v\n",
-				track.ID(), err)
-		})
-
-		_, err = pc.AddTransceiverFromTrack(track, webrtc.RTPTransceiverInit{
-			Direction: webrtc.RTPTransceiverDirectionSendonly,
-		})
-
-		if err != nil {
-			panic(err)
-		}
+		log.Fatal(err)
 	}
 
-	offer, err := pc.CreateOffer(nil)
+	client.VideoStream = stream
+	track := stream.GetVideoTracks()[0]
+
+	sender, err := pc.AddTrack(track)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
+	client.VideoSender = sender
 
-	msg, _ := json.Marshal(MessageOut{
-		Type: "offer",
-		Data: offer,
-	})
-	if err = pc.SetLocalDescription(offer); err != nil {
-		panic(err)
-	}
+	/* -------------------- Signaling -------------------- */
 
+	offer, _ := pc.CreateOffer(nil)
+	_ = pc.SetLocalDescription(offer)
+
+	msg, _ := json.Marshal(MessageOut{Type: "offer", Data: offer})
 	client.MessageChan <- msg
 
-	pc.OnICECandidate(func(i *webrtc.ICECandidate) {
-		if i == nil {
+	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if c == nil {
 			return
 		}
-		fmt.Println("sending ice candidate")
-		candidate := i.ToJSON()
-		msg, _ := json.Marshal(MessageOut{
-			Type: "ice",
-			Data: candidate,
-		})
+		msg, _ := json.Marshal(MessageOut{Type: "ice", Data: c.ToJSON()})
 		client.MessageChan <- msg
 	})
 
-	pc.OnSignalingStateChange(func(ss webrtc.SignalingState) {
-		fmt.Println("signaling state changed:", ss)
-	})
-
-	pc.OnConnectionStateChange(func(pcs webrtc.PeerConnectionState) {
-		fmt.Println("peer connection state changed:", pcs)
-	})
-
-	pc.OnICEConnectionStateChange(func(is webrtc.ICEConnectionState) {
-		fmt.Println("ice connection state: ", is)
-	})
-
 	for {
-		_, msgByte, err := conn.ReadMessage()
-		fmt.Println("incoming message")
+		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			return
 		}
-		handleWSMessage(client, msgByte)
+		handleWSMessage(client, msg, codecSelector)
 	}
 }
 
+/* ----------------------------- main ----------------------------- */
+
 func main() {
-
 	http.HandleFunc("/ws", handleWSConnection)
-	fmt.Println("Server started")
+	log.Println("Server started on :9091")
 	log.Fatal(http.ListenAndServe(":9091", nil))
-
 }

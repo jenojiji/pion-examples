@@ -14,16 +14,36 @@
       </div>
 
       <div class="content">
-
-        <audio
-          id="audioElement"
-          autoplay
-          muted
-        ></audio>
+        <audio id="audioElement" autoplay muted></audio>
 
         <div class="video-section" id="videoSection">
           <div class="video-label">Device Cam Feed</div>
           <video id="videoElement" autoplay playsinline muted></video>
+        </div>
+      </div>
+      <button
+        class="pixelateButton"
+        id="pixelateBtn"
+        onclick="onPixelateToggle()"
+      >
+        Pixelate
+      </button>
+      <div class="pixelation-slider">
+        <label for="volume">Volume:</label>
+
+        <input
+          type="range"
+          id="volume"
+          min="4"
+          max="32"
+          step="4"
+          value="8"
+          onchange="onPixelationLevelChange(this.value)"
+        />
+
+        <div class="ticks">
+          <span>4</span><span>8</span><span>12</span><span>16</span>
+          <span>20</span><span>24</span><span>28</span><span>32</span>
         </div>
       </div>
     </div>

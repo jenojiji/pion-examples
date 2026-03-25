@@ -25,6 +25,17 @@ h1 {
   margin-bottom: 24px;
 }
 
+.pixelation-slider {
+  width: 300px;
+}
+
+.ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 0 2px;
+}
+
 .content {
   display: flex;
   justify-content: center;

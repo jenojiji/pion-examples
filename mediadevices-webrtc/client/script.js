@@ -11,6 +11,55 @@ const videoElement = document.getElementById("videoElement");
 const videoSection = document.getElementById("videoSection");
 const audioElement = document.getElementById("audioElement");
 
+function onPixelationLevelChange(value) {
+  console.log("Pixelation level changed to:", value);
+  try {
+    const numericValue = Number(value);
+    if (!Number.isInteger(numericValue)) {
+      console.error("Invalid pixelation level value:", value);
+      return;
+    }
+
+    const pixelationLevelChangeMessage = {
+      type: "pixelationLevelChange",
+      data: numericValue,
+    };
+    ws.send(JSON.stringify(pixelationLevelChangeMessage));
+    console.log("Pixelation Level change message sent");
+  } catch (error) {
+    console.error(error);
+  }
+}
+let isPixelated = false;
+
+function onPixelateToggle() {
+  try {
+    const eventType = isPixelated ? "unpixelate" : "pixelate";
+
+    const message = {
+      type: eventType,
+      data: null,
+    };
+
+    ws.send(JSON.stringify(message));
+
+    console.log(eventType + " message sent");
+
+    // toggle state
+    isPixelated = !isPixelated;
+
+    // update button label
+    document.getElementById("pixelateBtn").textContent = isPixelated
+      ? "Unpixelate"
+      : "Pixelate";
+  } catch (error) {
+    console.log("pixelation toggle error:", error);
+  }
+}
+
+window.onPixelationLevelChange = onPixelationLevelChange;
+window.onPixelateToggle = onPixelateToggle;
+
 ws.onmessage = async (event) => {
   console.log(event);
 
